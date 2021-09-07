@@ -29,7 +29,9 @@ Notation itree_spec E := (itree (SpecEvent E)).
 (* The body of an itree_spec, inside the observe projection *)
 Notation itree_spec' E A := (itree' (SpecEvent E) A).
 
-
+(* One itree_spec refines another iff, after turning finitely many quantifier
+events to actual quantifiers, they have the same constructor with continuations
+such that the first continuation coinductively refines the second *)
 Inductive refinesF {E R} (F : itree_spec E R -> itree_spec E R -> Prop) : 
   itree_spec' E R -> itree_spec' E R -> Prop :=
   | refines_Ret (r : R) : refinesF F (RetF r) (RetF r)
@@ -41,20 +43,27 @@ Inductive refinesF {E R} (F : itree_spec E R -> itree_spec E R -> Prop) :
   | refines_TauR ophi phi :
       refinesF F ophi (observe phi) -> refinesF F ophi (TauF phi)
 *)
-  | refines_Spec_vis A e kphi1 kphi2 :
-      (forall a : A, F (kphi1 a) (kphi2 a) ) -> refinesF F (VisF (Spec_vis e) kphi1) (VisF (Spec_vis e) kphi2)
+  | refines_VisLR A e kphi1 kphi2 :
+      (forall a : A, F (kphi1 a) (kphi2 a) ) ->
+      refinesF F (VisF e kphi1) (VisF e kphi2)
   | refines_forallR A kphi phi :
-      (forall a : A, F phi (kphi a)) -> refinesF F (observe phi) (VisF Spec_forall kphi)
+      (forall a : A, refinesF F phi (observe (kphi a))) ->
+      refinesF F phi (VisF Spec_forall kphi)
   | refines_forallL A kphi phi :
-      (exists a : A, F (kphi a) phi) -> refinesF F (VisF Spec_forall kphi) (observe phi)
+      (exists a : A, refinesF F (observe (kphi a)) phi) ->
+      refinesF F (VisF Spec_forall kphi) phi
   | refines_existsR A kphi phi :
-      (exists a : A, F phi (kphi a)) -> refinesF F (observe phi) (VisF Spec_exists kphi)
+      (exists a : A, refinesF F phi (observe (kphi a))) ->
+      refinesF F phi (VisF Spec_exists kphi)
   | refines_existsL A kphi phi :
-      (forall a : A, F (kphi a) phi) -> refinesF F (VisF Spec_exists kphi) (observe phi)
+      (forall a : A, refinesF F (observe (kphi a)) phi) ->
+      refinesF F (VisF Spec_exists kphi) phi
 .
 
 Definition refines_ {E R} F (t1 t2: itree_spec E R) : Prop :=
   refinesF F (observe t1) (observe t2).
+
+FIXME: update the rest of this file to match the new definition of refinesF
 
 Lemma monotone_refines_ {E R} : monotone2 (@refines_ E R).
 Proof.
