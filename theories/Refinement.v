@@ -75,7 +75,6 @@ Lemma monotone_refines_ {E R} : monotone2 (@refines_ E R).
 Proof. red. intros. eapply monotone_refinesF; eauto. Qed.
 
 Hint Resolve monotone_refines_ : paco.
-Print monotone2.
 
 Instance Proper_upaco2_refines_ {E R} :
   Proper ((eq ==> eq ==> impl) ==> eq ==> eq ==> impl) (upaco2 (@refines_ E R)).
@@ -167,141 +166,6 @@ Proof.
 Qed.
 
 
-
-(*
-Variant non_empty (A : Type) : Prop := ne (a : A).
-
-Variant empty (A : Type) : Prop := emp : (A -> void) -> empty A.
-
-Instance proper_cong_refines {E R} : Proper (@eq_itree (SpecEvent E) R R eq ==> eq_itree eq ==> Basics.flip Basics.impl) refines.
-Proof. Admitted.
-
-Ltac use_simpobs := repeat match goal with
-                    | H : TauF ?ot = observe ?t |- _ => apply simpobs in H 
-                    | H : observe ?t = TauF ?ot  |- _ => symmetry in H; apply simpobs in H 
-                    | H : RetF ?r = observe ?t |- _ => apply simpobs in H 
-                    | H : observe ?t = RetF ?r  |- _ => symmetry in H; apply simpobs in H 
-                    | H : VisF ?e ?k = observe ?t |- _ => apply simpobs in H 
-                    | H : observe ?t = VisF ?e ?k  |- _ => symmetry in H; apply simpobs in H 
-                           end.
-
-
-CoFixpoint inf_forall_A {E R} (A : Type) : itree_spec E R := Vis (@Spec_forall E A) (fun _ => inf_forall_A A).
-
-Lemma refines_Vis_forallL' : forall (E : Type -> Type) (R A : Type) (t : itree_spec E R) k,
-    
-         refines (Vis Spec_forall k) t->
-         ( (exists k' : A -> itree_spec E R, t ≅ Vis Spec_forall k' /\ forall a, refines (k a) (k' a))  
-           \/
-           exists a : A, refines (k a) t).
-Proof.
-  intros E R A t k Hk.  punfold Hk. red in Hk.
-  cbn in *. remember (VisF Spec_forall k) as x. remember (observe t) as ot.
-  hinduction Hk before R; intros; inv Heqx; inj_existT; subst; pclearbot; use_simpobs.
-  - left. exists kphi2. split; auto.
-  - setoid_rewrite Heqot.
-    match type of Heqot with | t ≅ ?t' => assert (observe t' = observe t') end. auto.
-    cbn in H1.
-    match type of H with | forall a, refinesF _ ?t1 _ => assert (t1 = t1) end. auto.
-    eapply H0 in H2. 2 : reflexivity. 
-    destruct H2.
-    + destruct H2 as [k' [? ?] ]. right. eexists. pstep. econstructor. left. exists k'. split; auto.
-      admit. (*here is a pretty serious problem, this is definitely false *)
-    + destruct H2. right. exists x. pstep. constructor. intros.
-      admit. (*this is also a problem, uggh*)
-
-    (* setoid_rewrite Heqot. 
-    enough (exists a0 : A0, forall a, refines (k a0) (kphi a) ).
-    { right. destruct H1. exists x. pstep. red. constructor. intros. specialize (H1 a0).
-      punfold H1. } (* definitely something weird going on in this case *) admit. *)
-  - right. exists a. pstep. auto.
-  - setoid_rewrite Heqot. 
-    match type of Hk with refinesF _ ?t _ => assert (t = t) end; auto.
-    eapply IHHk in H. 2: reflexivity.
-    destruct H.
-    + decompose record H. rename x into k'. 
-      left. exists k'. rewrite <- H1. split; auto. admit.
-    + destruct H. right. exists x. pstep. red. cbn. econstructor.
-      punfold H.
-Abort.
-
-
-Lemma refines_Vis_forallL : forall (E : Type -> Type) (R A : Type) (t : itree_spec E R) k,
-         non_empty A ->
-         refines (Vis Spec_forall k) t->
-         exists a : A, refines (k a) t.
-Proof.
-  intros E R A t k HA Hk. punfold Hk. red in Hk.
-  enough (exists a, refinesF (upaco2 refines_ bot2) (observe (k a)) (observe t)).
-  { destruct H. exists x. pfold. eauto. }
-  cbn in Hk. remember (VisF Spec_forall k) as x.
-  remember (observe t) as ot. clear Heqot. cbn in *.
-  hinduction Hk before R; intros; inv Heqx; inj_existT; subst; pclearbot; eauto.
-  - destruct HA. admit.
-  - admit.
-  - 
-Abort. (* what if A is empty *)
-
-Lemma refines_Vis_aux:
-  forall (E : Type -> Type) (R : Type) (r : itree_spec E R -> itree_spec E R -> Prop) 
-    (A : Type) (e : SpecEvent E A) (kphi1 kphi2 : A -> itree_spec E R),
-    (forall x y z : itree_spec E R, refines x y -> refines y z -> r x z) ->
-    ( forall a : A, paco2 refines_ bot2 (kphi1 a) (kphi2 a)) ->
-      forall t3 : itree_spec E R,
-        refinesF (upaco2 refines_ bot2) (VisF e kphi2) (observe t3) ->
-        refinesF (upaco2 refines_ r) (VisF e kphi1) (observe t3).
-Proof.
-  intros E R r A e kphi1 kphi2 CIH Hk t3 Ht23.
-  remember (observe t3) as ot3. clear Heqot3.
-  assert (Hor : (exists kphi3, ot3 = VisF e kphi3) \/ (forall kphi3, ot3 <> VisF e kphi3)).
-  { destruct ot3; try (right; repeat intro; discriminate).
-    admit. } clear Hor.
-  destruct e.
-  - (*still more weirdness here*) admit.
-  - (* what I want to do is have some inversion rule on Ht23, 
-       then induct from there, and that might help
-     *) 
-    (* suppose A is empty, then t3 must be Vis Spec_forall, take one step and then done
-       otherwise may have a useful inversion
-     *)
-    econstructor.
-    remember (VisF Spec_forall kphi2) as x. 
-    hinduction Ht23 before r; intros; inv Heqx; inj_existT; subst; pclearbot.
-    + econstructor. (* right. eapply CIH; eauto. apply Hk. apply H.
-    + eapply refines_forallR. intros. eapply H0; eauto.
-    + specialize (Hk a). 
-      (*here I am not sure what is going on,   *)
-
-(*weirdness here due to the foralls having different types, may inspire different definition *)
-      admit.
-    + admit.
-    + rewrite itree_eta' at 1. eapply refines_existsR. eauto. admit.
-  -
- econstructor. 
-
-  remember (VisF e kphi2) as x. hinduction Ht23 before r; intros; inv Heqx; inj_existT; subst.
-  - constructor. right. eapply CIH; eauto. apply Hk. pclearbot. apply H.
-  - econstructor. intros. eapply H0; eauto.
-  - (* this inductive hypothesis is just not what I need *) 
-    destruct (observe (kphi2 a) ) eqn :  Hkphi2.
-    + admit.
-    + admit.
-    + destruct e.
-      * (* induct on Ht23*) admit.
-      * eapply IHHt23; eauto.
-      eapply IHHt23; eauto.
-
- eapply IHHt23 in Hk. econstructor. Unshelve. 2 : apply a.
-    
-
-    (* this would be fine if it were coinductive, but I'm stuck now, might need another coind hyp?*)
-    admit.
-  - econstructor. eapply IHHt23; eauto.
-  - econstructor. (*same I am not really sure how to make progress here *) admit. *)
-Abort.
-*)
-
-
 (* A version of refinesF specialized to a forall on the left *)
 Inductive forallRefinesF {E R} (F : itree_spec E R -> itree_spec E R -> Prop)
           {A} (kphi1: A -> itree_spec E R)
@@ -320,8 +184,8 @@ Inductive forallRefinesF {E R} (F : itree_spec E R -> itree_spec E R -> Prop)
       forallRefinesF F kphi1 (VisF Spec_exists kphi2)
 .
 
-Print forallRefinesF_ind.
-
+(* FIXME: should we replace the recursive call to refinesF in the above with
+just a refines? *)
 
 Lemma refinesF_Vis_forallL : forall (E : Type -> Type) (R A : Type) F
                                    (t : itree_spec' E R) (k : A -> itree_spec E R),
@@ -349,86 +213,76 @@ Proof.
 Qed.
 
 
-(* A version of refinesF specialized to an exists on the left *)
-Inductive existsRefinesF {E R} (F : itree_spec E R -> itree_spec E R -> Prop)
-          {A} (kphi1: A -> itree_spec E R)
-  : itree_spec' E R -> Prop :=
-  | existsRefines_VisLR kphi2 :
-      (forall a : A, F (kphi1 a) (kphi2 a)) ->
-      existsRefinesF F kphi1 (VisF Spec_exists kphi2)
-  | existsRefines_forallR B kphi2 :
-      (forall b : B, existsRefinesF F kphi1 (observe (kphi2 b))) ->
-      existsRefinesF F kphi1 (VisF Spec_forall kphi2)
-  | existsRefines_existsR B kphi2 (b : B) :
-      existsRefinesF F kphi1 (observe (kphi2 b)) ->
-      existsRefinesF F kphi1 (VisF Spec_exists kphi2)
-  | existsRefines_existsL phi :
-      (forall a, refinesF F (observe (kphi1 a)) phi) ->
-      existsRefinesF F kphi1 phi
-.
+Inductive isConcreteF {E R} (F : itree_spec E R -> Prop) :
+  itree_spec' E R -> Prop :=
+  | isConcrete_Ret (r : R) : isConcreteF F (RetF r)
+  | isConcrete_Tau (phi : itree_spec E R) :
+      F phi -> isConcreteF F (TauF phi)
+  | isConcrete_Vis A e kphi :
+      (forall a:A, F (kphi a)) -> isConcreteF F (VisF (Spec_vis e) kphi).
 
-Lemma refinesF_Vis_existsL : forall (E : Type -> Type) (R A : Type) F
-                                    (t : itree_spec' E R) (k : A -> itree_spec E R),
-    refinesF F (VisF Spec_exists k) t ->
-    @existsRefinesF E R F A k t.
+Hint Constructors isConcreteF.
+Definition isConcrete_ {E R} F (t: itree_spec E R) : Prop :=
+  isConcreteF F (observe t).
+
+Lemma monotone_isConcreteF {E R} (ot : itree_spec' E R) sim sim' 
+  (LE : sim <1= sim' )
+  (IN : isConcreteF sim ot) : 
+  isConcreteF sim' ot.
 Proof.
-(*
-  intros. remember (VisF Spec_forall k) as t1. induction H.
-  - inversion Heqt1.
-  - inversion Heqt1.
-  - assert (A0=A); [ inversion Heqt1; reflexivity | ].
-    revert e kphi1 Heqt1 kphi2 H; rewrite H0; intros.
-    assert (kphi1=k); [ inversion Heqt1; inj_existT; assumption | ].
-    rewrite H1 in H.
-    assert (e=Spec_forall); [ inversion Heqt1; inj_existT; assumption | ].
-    rewrite H2.
-    apply forallRefines_VisLR. apply H.
-  - apply forallRefines_forallR. intro b. apply H0. assumption.
-  - assert (A0=A); [ inversion Heqt1; reflexivity | ].
-    revert kphi Heqt1 a H IHrefinesF; rewrite H0; intros.
-    assert (kphi=k); [ inversion Heqt1; inj_existT; assumption | ].
-    rewrite H1 in H.
-    eapply forallRefines_forallL; eassumption.
-  - eapply forallRefines_existsR. apply IHrefinesF. assumption.
-  - inversion Heqt1.
+  induction IN; eauto.
 Qed.
-*)
-Admitted.
 
+Lemma monotone_isConcrete_ {E R} : monotone1 (@isConcrete_ E R).
+Proof. red. intros. eapply monotone_isConcreteF; eauto. Qed.
 
+Hint Resolve monotone_isConcrete_ : paco.
 
-(* Transitivity of refinement *)
-Instance Transitive_refines {E R} : Transitive (@refines E R).
+Definition isConcrete {E R} : itree_spec E R -> Prop := paco1 isConcrete_ bot1.
+
+Lemma isConcreteVisInv {E R A} e (k : A -> itree_spec E R) a :
+  isConcrete (Vis (Spec_vis e) k) -> isConcrete (k a).
 Proof.
-  red. pcofix CIH. intros t1 t2 t3 Ht12 Ht23.
+  intro isc; punfold isc. inversion isc.
+  assert (kphi0 = k); [ inj_existT; assumption | ].
+  rewrite H3 in H0. pclearbot. apply H0.
+Qed.
+
+(* Transitivity of refinement if the LHS is concrete *)
+Theorem concreteRefinesTrans {E R} (t1 t2 t3: itree_spec E R)
+         (isc:isConcrete t1) :
+  refines t1 t2 -> refines t2 t3 -> refines t1 t3.
+Proof.
+  revert t1 t2 t3 isc; pcofix CIH. intros t1 t2 t3 isc Ht12 Ht23.
   pfold. red. punfold Ht12. red in Ht12.
-  punfold Ht23. red in Ht23. remember (observe t3) as ot3.
-  clear t3 Heqot3.
+  punfold Ht23. red in Ht23.
+  remember (observe t3) as ot3. clear t3 Heqot3.
+  punfold isc. red in isc. remember (observe t1) as ot1. clear t1 Heqot1.
   hinduction Ht12 before r; intros; eauto.
   - remember (RetF r0) as x.
     hinduction Ht23 before r; intros; inv Heqx; eauto.
-  - pclearbot. remember (TauF phi2) as x.
+  - pclearbot. remember (TauF phi2) as x. inversion isc.
     hinduction Ht23 before r; intros; inv Heqx; pclearbot; eauto.
   - pclearbot. destruct e.
     + remember (VisF (Spec_vis e) kphi2) as x.
       hinduction Ht23 before r; intros; inv Heqx; inj_existT; subst; eauto.
-      pclearbot. econstructor. right. eapply CIH. apply H0. apply H.
-    + remember (refinesF_Vis_forallL _ _ _ _ _ _ Ht23) as Ht23'.
-      clear HeqHt23' Ht23. induction Ht23'.
-      * pclearbot. apply refines_VisLR. intro a. right.
-        apply (CIH _ _ _ (H a) (H0 a)).
-      * apply refines_forallR. intro a. apply H1.
-      * (* eapply refines_forallL. *)
-        admit. (* FIXME: how to handle this case? *)
-      * eapply refines_existsR. apply IHHt23'.
-    + admit. (* Should be doable with an existsRefinesF relation *)
+      pclearbot. econstructor. right. eapply CIH; try apply H0; try apply H.
+      eapply (isConcreteVisInv e0). pfold. apply isc.
+    + inversion isc.
+    + inversion isc.
   - remember (refinesF_Vis_forallL _ _ _ _ _ _ Ht23) as Ht23'.
     clear HeqHt23' Ht23. induction Ht23'.
-    * apply refines_forallR. intro a. eapply H0; [ apply CIH | ]. pclearbot.
+    * apply refines_forallR. intro a.
+      eapply H0; [ apply CIH | assumption | ].
       eapply (paco2_unfold (gf:=refines_)); [ apply monotone_refines_ | ].
-      apply H1.
+      destruct (H1 a); [ eassumption | contradiction ].
     * apply refines_forallR. intro b. apply H2.
-    * eapply H0; [ assumption | ]. eassumption.
+    * eapply H0; eassumption.
     * eapply refines_existsR. eassumption.
-  - admit. (* Should be doable with an existsRefinesF relation *)
-Admitted.
+  - inversion isc.
+  - assert (refines (Vis Spec_exists kphi) (go ot3)); [ pfold; apply Ht23 | ].
+    apply IHHt12; try assumption.
+    remember (refines_Vis_existsL _ _ _ (go ot3) kphi H a). clear Heqr0.
+    red in r0. punfold r0.
+  - inversion isc.
+Qed.
