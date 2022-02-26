@@ -29,6 +29,81 @@ Notation itree_spec E := (itree (SpecEvent E)).
 (* The body of an itree_spec, inside the observe projection *)
 Notation itree_spec' E A := (itree' (SpecEvent E) A).
 
+
+(***
+ *** Satisfaction of itree specs
+ ***)
+
+(* An itree satisfies an itree_spec iff it is eutt to an itree that satisfies
+all the quantifiers in the itree_spec *)
+Inductive satisfiesF {E R} (F : itree E R -> itree_spec E R -> Prop) :
+  itree' E R -> itree_spec' E R -> Prop :=
+  | satisfies_Ret (r : R) : satisfiesF F (RetF r) (RetF r)
+  | satisfies_TauLR phi1 (phi2 : itree_spec E R) :
+      F phi1 phi2 -> satisfiesF F (TauF phi1) (TauF phi2)
+  | satisfies_TauL phi ophi :
+      satisfiesF F (observe phi) ophi -> satisfiesF F (TauF phi) ophi
+  | satisfies_TauR ophi phi :
+      satisfiesF F ophi (observe phi) -> satisfiesF F ophi (TauF phi)
+  | satisfies_VisLR A e kphi1 kphi2 :
+      (forall a : A, F (kphi1 a) (kphi2 a) ) ->
+      satisfiesF F (VisF e kphi1) (VisF (Spec_vis e) kphi2)
+  | satisfies_forallR A kphi phi :
+      (forall a : A, satisfiesF F phi (observe (kphi a))) ->
+      satisfiesF F phi (VisF Spec_forall kphi)
+  | satisfies_existsR A kphi phi (a : A) :
+      (satisfiesF F phi (observe (kphi a))) ->
+      satisfiesF F phi (VisF Spec_exists kphi)
+.
+Hint Constructors satisfiesF.
+Definition satisfies_ {E R} F t1 (t2: itree_spec E R) : Prop :=
+  satisfiesF F (observe t1) (observe t2).
+
+Lemma monotone_satisfiesF {E R} ot1 (ot2 : itree_spec' E R) sim sim' 
+  (LE : sim <2= sim' )
+  (IN : satisfiesF sim ot1 ot2) : 
+  satisfiesF sim' ot1 ot2.
+Proof.
+  induction IN; eauto.
+Qed.
+
+Lemma monotone_satisfies_ {E R} : monotone2 (@satisfies_ E R).
+Proof. red. intros. eapply monotone_satisfiesF; eauto. Qed.
+
+Hint Resolve monotone_satisfies_ : paco.
+
+Instance Proper_upaco2_satisfies_ {E R} :
+  Proper ((eq ==> eq ==> impl) ==> eq ==> eq ==> impl) (upaco2 (@satisfies_ E R)).
+Proof.
+  intros r1 r2 prp_r t1 t2 e12 t3 t4 e34 r13.
+  rewrite <- e12. rewrite <- e34.
+  destruct r13.
+  - left. eapply (paco2_mon _ H).
+    intros x y. apply (prp_r x x eq_refl y y eq_refl).
+  - right. apply (prp_r _ _ eq_refl _ _ eq_refl H).
+Qed.
+
+Definition satisfies {E R} : itree E R -> itree_spec E R -> Prop :=
+  paco2 satisfies_ bot2.
+
+Instance Proper_eutt_satisfies_impl {E R} :
+  Proper (eutt eq ==> eutt eq ==> impl) (@satisfies E R).
+Proof.
+  admit.
+Admitted.
+
+Instance Proper_eutt_satisfies {E R} :
+  Proper (eutt eq ==> eutt eq ==> iff) (@satisfies E R).
+Proof.
+  repeat intro.
+  split; apply Proper_eutt_satisfies_impl; try assumption; symmetry; assumption.
+Qed.
+
+
+(***
+ *** Refinement of itree specs
+ ***)
+
 (* One itree_spec refines another iff, after turning finitely many quantifier
 events to actual quantifiers, they have the same constructor with continuations
 such that the first continuation coinductively refines the second *)
@@ -213,6 +288,31 @@ Proof.
 Qed.
 
 
+(* A version of refinesF specialized to a Tau on the left *)
+Inductive tauRefinesF {E R} (F : itree_spec E R -> itree_spec E R -> Prop)
+          (phi1: itree_spec E R)
+  : itree_spec' E R -> Prop :=
+  | tauRefines_VisLR phi2 : F phi1 phi2 -> tauRefinesF F phi1 (TauF phi2)
+  | tauRefines_forallR B kphi2 :
+      (forall b : B, tauRefinesF F phi1 (observe (kphi2 b))) ->
+      tauRefinesF F phi1 (VisF Spec_forall kphi2)
+  | tauRefines_existsR B kphi2 (b : B) :
+      tauRefinesF F phi1 (observe (kphi2 b)) ->
+      tauRefinesF F phi1 (VisF Spec_exists kphi2)
+.
+
+Lemma refinesF_Tau : forall (E : Type -> Type) (R : Type) F
+                            t1 (t2 : itree_spec' E R),
+    refinesF F (TauF t1) t2 ->
+    @tauRefinesF E R F t1 t2.
+Proof.
+  intros. remember (TauF t1) as t. induction H; inversion Heqt.
+  - rewrite <- H1. constructor. assumption.
+  - constructor. intro b. apply H0. assumption.
+  - econstructor. apply IHrefinesF. assumption.
+Qed.
+
+
 Inductive isConcreteF {E R} (F : itree_spec E R -> Prop) :
   itree_spec' E R -> Prop :=
   | isConcrete_Ret (r : R) : isConcreteF F (RetF r)
@@ -258,7 +358,7 @@ Proof.
   punfold Ht23. red in Ht23.
   remember (observe t3) as ot3. clear t3 Heqot3.
   punfold isc. red in isc. remember (observe t1) as ot1. clear t1 Heqot1.
-  hinduction Ht12 before r; intros; eauto.
+  hinduction Ht12 before r; intros.
   - remember (RetF r0) as x.
     hinduction Ht23 before r; intros; inv Heqx; eauto.
   - pclearbot. remember (TauF phi2) as x. inversion isc.
@@ -285,4 +385,44 @@ Proof.
     remember (refines_Vis_existsL _ _ _ (go ot3) kphi H a). clear Heqr0.
     red in r0. punfold r0.
   - inversion isc.
+Qed.
+
+
+(* Refinement defines a subset for satisfaction *)
+Theorem refinesSatisfiesSubset {E R} t1 (t2 t3: itree_spec E R) :
+  satisfies t1 t2 -> refines t2 t3 -> satisfies t1 t3.
+Proof.
+  revert t1 t2 t3; pcofix CIH. intros t1 t2 t3 Ht12 Ht23.
+  pfold. red. punfold Ht12. red in Ht12.
+  punfold Ht23. red in Ht23.
+  remember (observe t3) as ot3. clear t3 Heqot3.
+  remember (observe t1) as ot1. clear t1 Heqot1.
+  hinduction Ht12 before CIH; intros.
+  - remember (RetF r0) as x.
+    hinduction Ht23 before r; intros; inv Heqx; eauto.
+  - pclearbot. remember (TauF phi2) as x.
+    hinduction Ht23 before r; intros; inv Heqx; pclearbot; eauto.
+  - constructor. apply IHHt12; assumption.
+  - remember (refinesF_Tau _ _ _ _ _ Ht23) as Ht23'. clear HeqHt23' Ht23.
+    induction Ht23'.
+    + constructor. apply IHHt12. pclearbot. punfold H.
+    + constructor. intro b. apply H0.
+    + econstructor. eassumption.
+  - pclearbot.
+    + remember (VisF (Spec_vis e) kphi2) as x.
+      hinduction Ht23 before r; intros; inv Heqx; inj_existT; subst; eauto.
+      pclearbot. econstructor. right. eapply CIH; try apply H0; try apply H.
+  - remember (refinesF_Vis_forallL _ _ _ _ _ _ Ht23) as Ht23'.
+    clear HeqHt23' Ht23. induction Ht23'.
+    * apply satisfies_forallR. intro a.
+      apply (H0 a).
+      eapply (paco2_unfold (gf:=refines_)); [ apply monotone_refines_ | ].
+      destruct (H1 a); [ eassumption | contradiction ].
+    * apply satisfies_forallR. intro b. apply H2.
+    * eapply H0; eassumption.
+    * eapply satisfies_existsR. eassumption.
+  - assert (refines (Vis Spec_exists kphi) (go ot3)); [ pfold; apply Ht23 | ].
+    apply IHHt12; try assumption.
+    remember (refines_Vis_existsL _ _ _ (go ot3) kphi H a). clear Heqr0.
+    red in r0. punfold r0.
 Qed.
